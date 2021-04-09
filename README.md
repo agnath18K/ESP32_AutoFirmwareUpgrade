@@ -1,4 +1,4 @@
-# ESP8232_AutoFirmwareUpgrade
+# ESP32_AutoFirmwareUpgrade
 Automatic OTA Firmware Upgrade For ESP32.
 Using Github as host Server.
 

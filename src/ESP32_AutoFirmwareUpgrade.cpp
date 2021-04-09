@@ -29,11 +29,7 @@ Using Github as host Server.
 #include <time.h>
 
 #define WIFI_SSID "agnath18"
-#define WIFI_PASSWORD "123456789"
-
-#ifndef CERT_H
-
-#define CERT_H
+#define WIFI_PASSWORD "DF87@k6e7"
 
 const char * rootCACertificate = \
   "-----BEGIN CERTIFICATE-----\n"
@@ -59,8 +55,6 @@ const char * rootCACertificate = \
 "vEsXCS+0yx5DaMkHJ8HSXPfqIbloEpw8nL+e/IBcm2PN7EeqJSdnoDfzAIJ9VNep\n"
 "+OkuE6N36B9K\n"
 "-----END CERTIFICATE-----\n";
-
-#endif
 
 #define LED_BUILTIN 2
 

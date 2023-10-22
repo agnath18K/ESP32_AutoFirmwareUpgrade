@@ -21,96 +21,73 @@ Using Github as host Server.
   agnath18 :) 
 
 */
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPUpdate.h>
 #include <WiFiClientSecure.h>
 #include <time.h>
+#include "TrustRoot.h" 
 
-#define WIFI_SSID "agnath18"
-#define WIFI_PASSWORD "123456789"
+const char* HOST_URL = "raw.githubusercontent.com";
+const char* VERS_URL = "https://raw.githubusercontent.com/agnath18K/ESP32_AutoFirmwareUpgrade/main/bin/version";
+const char* Firm_URL = "https://raw.githubusercontent.com/agnath18K/ESP32_AutoFirmwareUpgrade/main/bin/firmware.bin";
+const char* WIFI_SSID = "agnath18";
+const char* WIFI_PASSWORD = "123456789";
 
-const char * rootCACertificate = \
-  "-----BEGIN CERTIFICATE-----\n"
-"MIIDxTCCAq2gAwIBAgIQAqxcJmoLQJuPC3nyrkYldzANBgkqhkiG9w0BAQUFADBs\n"
-"MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
-"d3cuZGlnaWNlcnQuY29tMSswKQYDVQQDEyJEaWdpQ2VydCBIaWdoIEFzc3VyYW5j\n"
-"ZSBFViBSb290IENBMB4XDTA2MTExMDAwMDAwMFoXDTMxMTExMDAwMDAwMFowbDEL\n"
-"MAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3\n"
-"LmRpZ2ljZXJ0LmNvbTErMCkGA1UEAxMiRGlnaUNlcnQgSGlnaCBBc3N1cmFuY2Ug\n"
-"RVYgUm9vdCBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMbM5XPm\n"
-"+9S75S0tMqbf5YE/yc0lSbZxKsPVlDRnogocsF9ppkCxxLeyj9CYpKlBWTrT3JTW\n"
-"PNt0OKRKzE0lgvdKpVMSOO7zSW1xkX5jtqumX8OkhPhPYlG++MXs2ziS4wblCJEM\n"
-"xChBVfvLWokVfnHoNb9Ncgk9vjo4UFt3MRuNs8ckRZqnrG0AFFoEt7oT61EKmEFB\n"
-"Ik5lYYeBQVCmeVyJ3hlKV9Uu5l0cUyx+mM0aBhakaHPQNAQTXKFx01p8VdteZOE3\n"
-"hzBWBOURtCmAEvF5OYiiAhF8J2a3iLd48soKqDirCmTCv2ZdlYTBoSUeh10aUAsg\n"
-"EsxBu24LUTi4S8sCAwEAAaNjMGEwDgYDVR0PAQH/BAQDAgGGMA8GA1UdEwEB/wQF\n"
-"MAMBAf8wHQYDVR0OBBYEFLE+w2kD+L9HAdSYJhoIAu9jZCvDMB8GA1UdIwQYMBaA\n"
-"FLE+w2kD+L9HAdSYJhoIAu9jZCvDMA0GCSqGSIb3DQEBBQUAA4IBAQAcGgaX3Nec\n"
-"nzyIZgYIVyHbIUf4KmeqvxgydkAQV8GK83rZEWWONfqe/EW1ntlMMUu4kehDLI6z\n"
-"eM7b41N5cdblIZQB2lWHmiRk9opmzN6cN82oNLFpmyPInngiK3BD41VHMWEZ71jF\n"
-"hS9OMPagMRYjyOfiZRYzy78aG6A9+MpeizGLYAiJLQwGXFK3xPkKmNEVX58Svnw2\n"
-"Yzi9RKR/5CYrCsSXaQ3pjOLAEFe4yHYSkVXySGnYvCoCWw9E1CAx2/S6cCZdkGCe\n"
-"vEsXCS+0yx5DaMkHJ8HSXPfqIbloEpw8nL+e/IBcm2PN7EeqJSdnoDfzAIJ9VNep\n"
-"+OkuE6N36B9K\n"
-"-----END CERTIFICATE-----\n";
+const int LED_BUILTIN_PIN = 2;
+const int httpsPort = 443;
+const unsigned long Update_Interval = 60000;
 
-#define LED_BUILTIN 2
-
-#define HOST_URL "raw.githubusercontent.com";
-#define VERS_URL "https://raw.githubusercontent.com/agnath18K/ESP32_AutoFirmwareUpgrade/main/bin/version"
-#define Firm_URL "https://raw.githubusercontent.com/agnath18K/ESP32_AutoFirmwareUpgrade/main/bin/firmware.bin"
+enum FirmwareUpdateResult {
+  FIRMWARE_UPDATE_SUCCESS,
+  FIRMWARE_UPDATE_FAILED,
+  FIRMWARE_NO_UPDATES
+};
 
 double Firm_Ver = 1.00;
-const unsigned long Update_Interval = 60000;
-const int httpsPort = 443;
+double Lat_Ver = 0.00;
+int Error_Count = 0;
+unsigned long lastUpdateMillis = 0;
 
-unsigned long counter = 0;
-double Lat_Ver;
-int Error_Count=1;
-const char* host = HOST_URL;
+void setup() {
+  Serial.begin(115200);
+  Connect_WiFi();
+  setClock();
+}
 
-void Error_Con();
-void Connect_WiFi();
-void setClock();
+void loop() {
+  if (millis() - lastUpdateMillis >= Update_Interval) {
+    FirmwareUpdateResult result = Firmware_Update();
+    lastUpdateMillis = millis();
+    if (result == FIRMWARE_UPDATE_SUCCESS) {
 
-void Error_Con() {
-  Serial.print("\nError Detected.\nError Count : ");
-  Serial.print(Error_Count);
-  Error_Count+=1;
-  if(Error_Count>3)  {
-    Serial.print("\nProceeding ESP Restart In 60 Seconds\n");
-    Error_Count=0;
-    delay(60000);
-    Serial.print("\n\nRestarting ESP\n\n");
-    ESP.restart(); }
-  else {
-    Serial.println("\nRestarting WiFi Connection");
-    Connect_WiFi(); } }
+    }
+  }
+}
 
 void Connect_WiFi() {
- WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
- Serial.print("\n\nConnecting to Wi-Fi");
- int try_count=0;
- while (WiFi.status() != WL_CONNECTED)
-  {
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("\nConnecting to Wi-Fi");
+  int try_count = 0;
+  while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(300);
-    try_count+=1;
-    if(try_count>=100) {
-    Serial.println("\nConnection taking too long.");
-    Error_Con(); }
+    try_count++;
+    if (try_count >= 100) {
+      Serial.println("\nConnection taking too long.");
+      Error_Con();
+    }
   }
- Serial.println();
- Serial.print("Connected with IP: ");
- Serial.println(WiFi.localIP());
- Serial.println();
- setClock(); }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+  setClock();
+}
 
 void setClock() {
-  int ntp_count=0;
-  configTime(0, 0, "pool.ntp.org", "time.google.com"); 
+  int ntp_count = 0;
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
   Serial.print(F("\nWaiting for NTP time sync: "));
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
@@ -118,78 +95,78 @@ void setClock() {
     delay(500);
     Serial.print(F("."));
     now = time(nullptr);
-    ntp_count+=1;
-    if(ntp_count>=100) {
-    Serial.println("\nConnection taking too long.");
-    Error_Con(); } } }
-      
-void Firmware_Update() {
- 
- WiFiClientSecure client;
- client.setCACert(rootCACertificate);
- 
- Serial.print("\nConnection to host : ");
+    ntp_count++;
+    if (ntp_count >= 100) {
+      Serial.println("\nConnection taking too long.");
+      Error_Con();
+    }
+  }
+}
 
- if (!client.connect(host, httpsPort)) {
+void Error_Con() {
+  Serial.print("\nError Detected.\nError Count : ");
+  Serial.print(Error_Count);
+  Error_Count++;
+  if (Error_Count > 3) {
+    Serial.print("\nProceeding ESP Restart In 60 Seconds\n");
+    Error_Count = 0;
+    delay(60000);
+    Serial.print("\n\nRestarting ESP\n\n");
+    ESP.restart();
+  } else {
+    Serial.println("\nRestarting WiFi Connection");
+    Connect_WiFi();
+  }
+}
+
+FirmwareUpdateResult Firmware_Update() {
+  WiFiClientSecure client;
+  client.setCACert(rootCACertificate);
+
+  Serial.print("\nConnection to host : ");
+  if (!client.connect(HOST_URL, httpsPort)) {
     Serial.println("Failed");
     Error_Con();
-    return; }
+    return FIRMWARE_UPDATE_FAILED;
+  }
+
   Serial.print("Success\n");
 
-  String url = VERS_URL;
-  Serial.print("\nCurrent Firmware Version : ");
-  Serial.print(Firm_Ver);
-
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" +
-               "User-Agent: BuildFailureDetectorESP32\r\n" +
+  client.print(String("GET ") + VERS_URL + " HTTP/1.1\r\n" +
+               "Host: " + HOST_URL + "\r\n" +
+               "User-Agent: ESP32_Firmware_Updater\r\n" +
                "Connection: close\r\n\r\n");
 
   while (client.connected()) {
     String line = client.readStringUntil('\n');
     if (line == "\r") {
-      break; }
-     }
+      break;
+    }
+  }
+
   String line = client.readStringUntil('\n');
   Lat_Ver = line.toDouble();
-  Serial.print("\nLatest Firmware Version   : ");
-  Serial.println(Lat_Ver);
-  if(Lat_Ver==404.00)
-  Serial.println("\nFailed to retrieve Version file.\nSkipping Firmware Check\n");
-  else {
-  if(Firm_Ver>=Lat_Ver)
-  Serial.println("\nDevice Running On Latest Firmware");
-  else
-  {
-  Serial.println("\nNew Firmware Found!");
-  Serial.println("\nStarting Upgrade\n");
-  httpUpdate.setLedPin(LED_BUILTIN, LOW); 
-  t_httpUpdate_return ret = httpUpdate.update(client, Firm_URL);
 
-    switch (ret) {
-      case HTTP_UPDATE_FAILED:
-        Serial.printf("FIRMWARE_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
-        break;
-
-      case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("FIRMWARE_UPDATE_NO_UPDATES");
-        break;
-
-      case HTTP_UPDATE_OK:
-        Serial.println("FIRMWARE_UPDATE_OK");
-        break; } } } }
-
-void setup()
-{
- Serial.begin(115200);
- Serial.print("\n");
- Connect_WiFi();
- setClock();
- }
-
- void loop()
- {
-  if(millis() - counter >= Update_Interval) {
-  Firmware_Update();
-  counter = millis(); }
+  if (Lat_Ver == 404.00) {
+    Serial.println("\nFailed to retrieve Version file.\nSkipping Firmware Check\n");
+    return FIRMWARE_UPDATE_FAILED;
   }
+
+  if (Firm_Ver >= Lat_Ver) {
+    Serial.println("\nDevice Running On Latest Firmware");
+    return FIRMWARE_NO_UPDATES;
+  } else {
+    Serial.println("\nNew Firmware Found!");
+    Serial.println("\nStarting Upgrade\n");
+    httpUpdate.setLedPin(LED_BUILTIN_PIN, LOW);
+    t_httpUpdate_return ret = httpUpdate.update(client, Firm_URL);
+
+    if (ret == HTTP_UPDATE_OK) {
+      Serial.println("FIRMWARE_UPDATE_OK");
+      return FIRMWARE_UPDATE_SUCCESS;
+    } else {
+      Serial.printf("FIRMWARE_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+      return FIRMWARE_UPDATE_FAILED;
+    }
+  }
+}
